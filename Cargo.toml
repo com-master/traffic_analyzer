@@ -1,0 +1,10 @@
+[package]
+name = "traffic_analyzer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+etherparse = "0.18.0"
+memchr = "2.7.5"
+pcap = "2.2.0"
+tcp-stream-capture = {path = "/home/user/src/tcp-stream-capture"}
