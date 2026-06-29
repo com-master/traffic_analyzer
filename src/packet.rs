@@ -49,7 +49,15 @@ pub struct PacketInfo {
 
 /// Parses an Ethernet frame down to ICMPv4/TCP/UDP over IPv4.
 /// Anything else (IPv6, ARP, ICMPv6, ...) is intentionally out of scope for now.
-pub fn parse_packet(data: &[u8]) -> Option<PacketInfo> {
+///
+/// `captured_at` comes from the capture backend's own per-packet timestamp
+/// (`pcap`'s `PacketHeader::ts`), not `SystemTime::now()`: when replaying a
+/// pcap file, packets are processed as fast as the loop runs, so "now"
+/// would bunch every packet within milliseconds of each other regardless of
+/// how far apart they actually occurred on the wire. That would corrupt
+/// both flow/host rate features and any time-window-based labeling of the
+/// resulting dataset.
+pub fn parse_packet(data: &[u8], captured_at: SystemTime) -> Option<PacketInfo> {
     let sliced = match SlicedPacket::from_ethernet(data) {
         Ok(sliced) => sliced,
         Err(e) => {
@@ -64,7 +72,7 @@ pub fn parse_packet(data: &[u8]) -> Option<PacketInfo> {
     let header = ipv4.header();
 
     let base = PacketInfo {
-        captured_at: SystemTime::now(),
+        captured_at,
         src_ip: header.source_addr(),
         dst_ip: header.destination_addr(),
         ttl: header.ttl(),

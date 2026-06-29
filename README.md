@@ -63,19 +63,48 @@ verdicts and just needs to be wired to that backend.
 
 ## Training a model
 
-`dataset.csv` accumulates labeled-as-`unknown` samples from live capture.
-To get a meaningful classifier:
+`dataset.csv` accumulates samples from live capture or pcap replay, all
+labeled `"unknown"` — a pcap is just `(timestamp, raw_bytes)` records, it
+carries no ground truth about which packets were part of an attack. That
+has to come from outside the capture: either a public dataset's
+accompanying metadata, or your own log of when you replayed/injected known
+attack traffic and from which source IP. Note that `timestamp_unix` in
+`dataset.csv` is each packet's own pcap-recorded timestamp (`PacketHeader`
+in live mode), not wall-clock "now" — so the timestamps in a replayed file
+line up with whenever the traffic actually happened on the wire, which is
+what makes time-window labeling below possible in the first place.
 
-1. Label samples (manually, or by replaying known-bad traffic captures).
-2. Train an `IdsClassifier` (see `src/ml/mod.rs`) — either directly in
-   `burn`, or in another framework and import the weights (e.g. via ONNX).
-3. Load the trained weights in `MlEngine` using burn's recorder API instead
-   of `new_untrained`, e.g.:
-   ```rust
-   let record = BinFileRecorder::<FullPrecisionSettings>::new()
-       .load(path.into(), &device)?;
-   let model = model.load_record(record);
+1. **Capture/replay** to produce `dataset.csv` (see "Running" below).
+2. **Label** it with `label_dataset`, given a list of attack time-windows
+   (each naming the attacking `src_ip`, a `[start, end]` Unix-time range,
+   and the label to apply — matching the source's own pcap timestamps).
+   Rows outside every window default to `benign`, since most of any
+   capture — including the run-up before an attack starts — is ordinary
+   traffic:
+   ```sh
+   ./target/debug/label_dataset dataset.csv windows.csv labeled.csv
    ```
+   `windows.csv` format (`#` starts a comment):
+   ```
+   start_unix,end_unix,src_ip,label
+   1700000040,1700000045,10.0.0.66,icmp_anomaly
+   ```
+3. **Train** `IdsClassifier` on the labeled CSV with `burn`'s
+   `Autodiff<NdArray<f32>>` backend (Adam optimizer, cross-entropy loss):
+   ```sh
+   ./target/debug/train labeled.csv weights.bin --epochs 50
+   ```
+4. **Run** with the trained weights instead of random ones:
+   ```sh
+   ./target/debug/traffic_analyzer path/to/capture.pcap --weights weights.bin
+   ```
+   `MlEngine::load` (`src/ml/mod.rs`) loads the file with burn's recorder
+   API (`BinFileRecorder<FullPrecisionSettings>`, the same format
+   `train`'s `Module::save_file` writes). The labels passed to
+   `MlEngine::load`/`new_untrained` in `main.rs` must stay in the same
+   order `train` was run with, and `--hidden` (default
+   `ml::HIDDEN_SIZE`) must match between training and loading or the
+   saved weights won't fit the model's shape.
 
 ## Building
 
@@ -95,11 +124,15 @@ sudo ./target/debug/traffic_analyzer
 
 # Offline: replay every packet from a previously captured file:
 ./target/debug/traffic_analyzer path/to/capture.pcap
+
+# Either mode: load a trained model instead of random weights (see "Training a model"):
+./target/debug/traffic_analyzer path/to/capture.pcap --weights weights.bin
 ```
 
 Both modes feed the same parsing/detection/ML pipeline. Live capture runs
 until interrupted; replaying a file runs until it's exhausted, then exits.
 The chosen network device (live mode) or file path (offline mode) is
 printed on startup; alerts are logged to stdout as `[rule] ...` or
-`[ml:untrained] ...`, and every observed packet is appended to `dataset.csv`
-in the working directory.
+`[ml:untrained] ...` (`[ml] ...` once `--weights` is loading a trained
+model), and every observed packet is appended to `dataset.csv` in the
+working directory.

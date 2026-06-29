@@ -3,9 +3,15 @@ use burn::backend::NdArray;
 use burn::config::Config;
 use burn::module::Module;
 use burn::nn::{Linear, LinearConfig, Relu};
+use burn::record::{BinFileRecorder, FullPrecisionSettings, RecorderError};
 use burn::tensor::activation::softmax;
 use burn::tensor::backend::{Backend, BackendTypes};
 use burn::tensor::Tensor;
+
+/// Hidden layer width for [`IdsClassifier`]. Shared between `MlEngine` and
+/// the `train` binary so a model trained with the default settings always
+/// matches the shape `MlEngine::load` expects.
+pub const HIDDEN_SIZE: usize = 32;
 
 /// CPU inference backend. Burn also supports wgpu/cuda/tch/candle backends
 /// behind feature flags if GPU inference is needed later; ndarray is
@@ -62,7 +68,8 @@ pub struct Verdict {
 /// IMPORTANT: `new_untrained` initializes the network with random weights.
 /// It lets the full pipeline (capture -> features -> ML verdict -> action)
 /// run end-to-end today, but the verdicts are not meaningful until a real
-/// model is trained and its weights are loaded here - see `load_weights`.
+/// model is trained (see the `train` binary) and its weights are loaded
+/// with `MlEngine::load`.
 pub struct MlEngine {
     model: IdsClassifier<InferenceBackend>,
     device: <InferenceBackend as BackendTypes>::Device,
@@ -72,7 +79,7 @@ pub struct MlEngine {
 impl MlEngine {
     pub fn new_untrained(labels: Vec<String>) -> Self {
         let device = <InferenceBackend as BackendTypes>::Device::default();
-        let config = IdsClassifierConfig::new(FeatureVector::LEN, 32, labels.len());
+        let config = IdsClassifierConfig::new(FeatureVector::LEN, HIDDEN_SIZE, labels.len());
         let model = config.init(&device);
         Self {
             model,
@@ -81,12 +88,21 @@ impl MlEngine {
         }
     }
 
-    // TODO: once a model has been trained (in burn directly, or trained
-    // elsewhere and converted - e.g. via ONNX import), load its weights
-    // here with burn's recorder API instead of `new_untrained`, e.g.:
-    //   let record = BinFileRecorder::<FullPrecisionSettings>::new()
-    //       .load(path.into(), &device)?;
-    //   let model = model.load_record(record);
+    /// Loads weights saved by the `train` binary (`BinFileRecorder` /
+    /// `FullPrecisionSettings`, same format `Module::save_file` writes).
+    /// `labels` must list classes in the same order they were trained with.
+    pub fn load(path: &str, labels: Vec<String>) -> Result<Self, RecorderError> {
+        let device = <InferenceBackend as BackendTypes>::Device::default();
+        let config = IdsClassifierConfig::new(FeatureVector::LEN, HIDDEN_SIZE, labels.len());
+        let model = config
+            .init(&device)
+            .load_file(path, &BinFileRecorder::<FullPrecisionSettings>::new(), &device)?;
+        Ok(Self {
+            model,
+            device,
+            labels,
+        })
+    }
 
     pub fn predict(&self, features: &FeatureVector) -> Verdict {
         let input: Tensor<InferenceBackend, 1> =
