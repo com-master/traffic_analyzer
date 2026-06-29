@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+burn = { version = "0.21.0", default-features = false, features = ["std", "ndarray"] }
+csv = "1.4.0"
 etherparse = "0.18.0"
 memchr = "2.7.5"
 pcap = "2.2.0"
