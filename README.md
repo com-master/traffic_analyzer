@@ -1,6 +1,7 @@
 # Traffic analyzer
 
-Live network IDS written in Rust. Captures traffic with `pcap`, parses
+Live network IDS written in Rust. Captures traffic with `pcap` — either
+live from a network device or replayed from a `.pcap` file — parses
 ICMP/TCP/UDP over IPv4, and raises alerts from two independent sources:
 
 - **Rule-based detector** (`src/detector.rs`): FTP anonymous login, TCP SYN
@@ -70,8 +71,17 @@ Then `make build` (or `cargo build`).
 
 ## Running
 
-`make run` (runs `sudo ./target/debug/traffic_analyzer`) — root/`CAP_NET_RAW`
-is required for promiscuous packet capture. The chosen network device is
+```sh
+# Live capture from the default device (make run does this, as root/CAP_NET_RAW):
+sudo ./target/debug/traffic_analyzer
+
+# Offline: replay every packet from a previously captured file:
+./target/debug/traffic_analyzer path/to/capture.pcap
+```
+
+Both modes feed the same parsing/detection/ML pipeline. Live capture runs
+until interrupted; replaying a file runs until it's exhausted, then exits.
+The chosen network device (live mode) or file path (offline mode) is
 printed on startup; alerts are logged to stdout as `[rule] ...` or
 `[ml:untrained] ...`, and every observed packet is appended to `dataset.csv`
 in the working directory.

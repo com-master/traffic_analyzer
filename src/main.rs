@@ -12,19 +12,41 @@ use detector::Detector;
 use features::FeatureVector;
 use flow::{FlowKey, FlowTracker};
 use ml::MlEngine;
-use pcap::{Capture, Device};
+use pcap::{Activated, Capture, Device};
+use std::env;
 
 const DATASET_PATH: &str = "dataset.csv";
 
-fn main() {
-    let device = Device::lookup().unwrap().unwrap();
-    println!("Chosen device: {}", device.name);
+/// Either a live device capture or a previously-recorded pcap file, unified
+/// behind `Capture<dyn Activated>` so the analysis loop below doesn't need
+/// to care which one it's reading from.
+fn open_capture(pcap_file: Option<&str>) -> Capture<dyn Activated> {
+    match pcap_file {
+        Some(path) => {
+            println!("Replaying pcap file: {}", path);
+            Capture::from_file(path)
+                .expect("Failed to open pcap file")
+                .into()
+        }
+        None => {
+            let device = Device::lookup().unwrap().unwrap();
+            println!("Chosen device: {}", device.name);
+            Capture::from_device(device)
+                .expect("Failed to open device")
+                .promisc(true)
+                .open()
+                .expect("Failed to activate device")
+                .into()
+        }
+    }
+}
 
-    let mut cap = Capture::from_device(device)
-        .expect("Failed to open device")
-        .promisc(true)
-        .open()
-        .expect("Failed to activate device");
+fn main() {
+    // Usage: traffic_analyzer [path/to/capture.pcap]
+    // With no argument, capture live from the default device; with a path,
+    // replay that pcap file through the same parsing/detection pipeline.
+    let pcap_file = env::args().nth(1);
+    let mut cap = open_capture(pcap_file.as_deref());
 
     let mut flow_tracker = FlowTracker::new();
     let mut detector = Detector::new();
