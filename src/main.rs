@@ -52,13 +52,25 @@ fn main() {
     let mut detector = Detector::new();
 
     // Class labels the (currently untrained) classifier reports against.
-    // Random weights -> verdicts below are not meaningful yet; see
-    // ml::MlEngine and README for how a trained model would be plugged in.
+    // These are protocol-level DDoS/scan anomaly classes - signature-based
+    // detections like FTP anonymous login stay in `detector.rs`, since the
+    // FeatureVector has no payload-content signal for the ML model to
+    // learn that from. tcp_syn_anomaly is split out from tcp_anomaly
+    // because a SYN flood/scan (half-open connections) is behaviorally
+    // distinct from a full TCP flood. Random weights -> verdicts below are
+    // not meaningful yet; see ml::MlEngine and README for how a trained
+    // model would be plugged in.
     let ml_engine = MlEngine::new_untrained(
-        ["benign", "syn_scan", "udp_scan", "ftp_anon_login"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+        [
+            "benign",
+            "tcp_anomaly",
+            "tcp_syn_anomaly",
+            "udp_anomaly",
+            "icmp_anomaly",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect(),
     );
     println!("ML model is untrained (random weights) - verdicts below are illustrative only.");
 

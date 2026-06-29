@@ -9,10 +9,17 @@ ICMP/TCP/UDP over IPv4, and raises alerts from two independent sources:
   "destination unreachable" bursts).
 - **ML classifier** (`src/ml`): a small feed-forward network (via the
   [`burn`](https://burn.dev) framework, pure Rust) that scores each packet
-  against the same flow/packet features. **Currently runs with random,
-  untrained weights** — its verdicts are illustrative only, showing that the
-  capture → features → tensor → verdict pipeline is wired end-to-end. See
-  "Training a model" below for how to make it meaningful.
+  against the same flow/packet features, classifying into
+  `tcp_anomaly` / `tcp_syn_anomaly` / `udp_anomaly` / `icmp_anomaly` /
+  `benign` — protocol-level DDoS/scan behavior, with SYN floods/scans split
+  out from general TCP since half-open connections are a distinct pattern.
+  Signature-based detections like FTP anonymous login stay in the
+  rule-based detector instead, since `FeatureVector` carries no
+  payload-content signal for the model to learn that from.
+  **Currently runs with random, untrained weights** — its verdicts are
+  illustrative only, showing that the capture → features → tensor →
+  verdict pipeline is wired end-to-end. See "Training a model" below for
+  how to make it meaningful.
 
 ## Pipeline
 
