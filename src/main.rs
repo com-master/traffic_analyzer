@@ -3,6 +3,7 @@ mod dataset;
 mod detector;
 mod features;
 mod flow;
+mod host;
 mod ml;
 mod packet;
 
@@ -11,6 +12,7 @@ use dataset::DatasetWriter;
 use detector::Detector;
 use features::FeatureVector;
 use flow::{FlowKey, FlowTracker};
+use host::HostTracker;
 use ml::MlEngine;
 use pcap::{Activated, Capture, Device};
 use std::env;
@@ -49,6 +51,7 @@ fn main() {
     let mut cap = open_capture(pcap_file.as_deref());
 
     let mut flow_tracker = FlowTracker::new();
+    let mut host_tracker = HostTracker::new();
     let mut detector = Detector::new();
 
     // Class labels the (currently untrained) classifier reports against.
@@ -89,7 +92,8 @@ fn main() {
 
         let flow_key = FlowKey::from_packet(&parsed);
         let flow_state = flow_tracker.observe(&parsed);
-        let feature_vector = FeatureVector::from_packet(&parsed, &flow_state);
+        let host_state = host_tracker.observe(&parsed);
+        let feature_vector = FeatureVector::from_packet(&parsed, &flow_state, &host_state);
 
         if let Err(e) = dataset_writer.write_sample(
             parsed.captured_at,

@@ -35,10 +35,21 @@ pcap capture -> packet::parse_packet -> flow::FlowTracker -> features::FeatureVe
 
 Every observed packet is turned into a fixed-size feature vector
 (`FeatureVector`, see `src/features.rs`) combining per-packet header fields
-(protocol, length, TTL, ports, TCP flags, window size, payload length) with
-flow-level aggregates (packet/byte counts, duration, packets/sec). Each
-sample is appended to `dataset.csv` for offline labeling/training, and also
-fed straight into the ML classifier for a live verdict.
+(protocol, length, TTL, ports, TCP flags, window size, payload length),
+flow-level aggregates from `flow::FlowTracker` (packet/byte counts,
+duration, packets/sec for this exact 5-tuple), and source-host aggregates
+from `host::HostTracker` (`host_packets_per_sec` / `host_protocol_diversity`
+— this source IP's combined rate and protocol spread *across all of its
+flows*). The host-level features exist because a single attacker can split
+a DDoS across protocols (e.g. an ICMP flood and a TCP SYN flood at once);
+each individual flow's rate can look unremarkable while the source's
+combined rate and protocol diversity spike. Scoped by `src_ip` rather than
+the target's `dst_ip` so a verdict derived from it stays attributable to
+the actual attacker - important if/when `Mode::Ips` starts enforcing
+blocks, so a multi-vector attack on a destination doesn't get "fixed" by
+blocking all traffic to that destination. Each sample is appended to
+`dataset.csv` for offline labeling/training, and also fed straight into the
+ML classifier for a live verdict.
 
 ## IDS vs IPS
 

@@ -1,4 +1,5 @@
 use crate::flow::FlowState;
+use crate::host::HostState;
 use crate::packet::{L4Protocol, PacketInfo};
 
 /// Flat numeric representation of a packet (+ its flow context), ready to
@@ -26,10 +27,12 @@ pub struct FeatureVector {
     pub flow_byte_count: f32,
     pub flow_duration_secs: f32,
     pub flow_packets_per_sec: f32,
+    pub host_packets_per_sec: f32,
+    pub host_protocol_diversity: f32,
 }
 
 impl FeatureVector {
-    pub const LEN: usize = 19;
+    pub const LEN: usize = 21;
 
     pub const FIELD_NAMES: [&'static str; Self::LEN] = [
         "protocol_icmp",
@@ -51,9 +54,11 @@ impl FeatureVector {
         "flow_byte_count",
         "flow_duration_secs",
         "flow_packets_per_sec",
+        "host_packets_per_sec",
+        "host_protocol_diversity",
     ];
 
-    pub fn from_packet(packet: &PacketInfo, flow: &FlowState) -> Self {
+    pub fn from_packet(packet: &PacketInfo, flow: &FlowState, host: &HostState) -> Self {
         FeatureVector {
             protocol_icmp: (packet.protocol == L4Protocol::Icmp) as u32 as f32,
             protocol_tcp: (packet.protocol == L4Protocol::Tcp) as u32 as f32,
@@ -74,6 +79,8 @@ impl FeatureVector {
             flow_byte_count: flow.byte_count as f32,
             flow_duration_secs: flow.duration().as_secs_f32(),
             flow_packets_per_sec: flow.packets_per_sec(),
+            host_packets_per_sec: host.packets_per_sec(),
+            host_protocol_diversity: host.protocol_diversity() as f32,
         }
     }
 
@@ -98,6 +105,8 @@ impl FeatureVector {
             self.flow_byte_count,
             self.flow_duration_secs,
             self.flow_packets_per_sec,
+            self.host_packets_per_sec,
+            self.host_protocol_diversity,
         ]
     }
 }
